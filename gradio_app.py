@@ -165,6 +165,47 @@ class GradioVideoColorizer:
             self.models_available = False
             return False
     
+    def validate_video_file(self, video_path: str):
+        """
+        Validate video file for compatibility.
+        
+        Returns:
+            tuple: (is_valid, message)
+        """
+        try:
+            video_path = Path(video_path)
+            
+            # Check if file exists
+            if not video_path.exists():
+                return False, "Video file not found"
+            
+            # Check file extension
+            allowed_extensions = ['.mp4', '.avi', '.mov', '.mkv']
+            if video_path.suffix.lower() not in allowed_extensions:
+                return False, f"Unsupported format. Use: {', '.join(allowed_extensions)}"
+            
+            # Check file size
+            file_size_mb = video_path.stat().st_size / (1024 * 1024)
+            if file_size_mb > 500:
+                return False, f"File too large ({file_size_mb:.1f}MB). Keep under 200MB for best performance."
+            
+            # Basic validation passed
+            warnings = []
+            if file_size_mb > 200:
+                warnings.append(f"Large file ({file_size_mb:.1f}MB) - processing may be slow")
+            
+            if video_path.suffix.lower() != '.mp4':
+                warnings.append("MP4 format recommended for best compatibility")
+            
+            message = "✅ Video file validated"
+            if warnings:
+                message += f"\n⚠️ Notes: {'; '.join(warnings)}"
+            
+            return True, message
+            
+        except Exception as e:
+            return False, f"Error validating file: {str(e)}"
+    
     def colorize_video(
         self,
         input_video,
@@ -221,10 +262,102 @@ DeOldify components are not properly installed. Please check your installation.
 Please upload a video file to colorize.
 
 ### Supported formats:
-- MP4 (.mp4)
-- AVI (.avi) 
-- MOV (.mov)
-- MKV (.mkv)
+- **MP4 (.mp4)** - Recommended
+- **AVI (.avi)** 
+- **MOV (.mov)**
+- **MKV (.mkv)**
+
+### Upload Tips:
+- Keep file size under 200MB for best performance
+- Use 720p or 1080p resolution
+- Start with short videos (under 30 seconds) for testing
+"""
+        
+    def colorize_video(
+        self,
+        input_video,
+        colorization_method: str = "stable",
+        render_factor: int = 21,
+        enable_temporal_consistency: bool = True,
+        enable_edge_enhancement: bool = True,
+        enable_color_stabilization: bool = True,
+        post_processing_preset: str = "balanced",
+        custom_saturation: float = 1.1,
+        custom_contrast: float = 1.05,
+        temperature_adjustment: float = 0.0,
+        tint_adjustment: float = 0.0,
+        frame_skip: int = 1,
+        progress=gr.Progress()
+    ):
+        """
+        Colorize video with enhanced processing options.
+        
+        Args:
+            input_video: Input video file
+            colorization_method: Method to use (stable/artistic)
+            render_factor: Quality factor for rendering
+            enable_temporal_consistency: Enable temporal consistency
+            enable_edge_enhancement: Enable edge enhancement
+            enable_color_stabilization: Enable color stabilization
+            post_processing_preset: Post-processing preset
+            custom_saturation: Custom saturation factor
+            custom_contrast: Custom contrast factor
+            temperature_adjustment: Color temperature adjustment
+            tint_adjustment: Tint adjustment
+            frame_skip: Process every Nth frame
+            progress: Gradio progress tracker
+            
+        Returns:
+            Tuple of (output_video_path, processing_info)
+        """
+        if not DEOLDIFY_AVAILABLE:
+            return None, """
+## ❌ DeOldify Not Available
+
+DeOldify components are not properly installed. Please check your installation.
+
+### Troubleshooting:
+1. Ensure all required packages are installed
+2. Check that the deoldify module is available
+3. Verify your Python environment setup
+"""
+        
+        if input_video is None:
+            return None, """
+## ⚠️ No Video File
+
+Please upload a video file to colorize.
+
+### Supported formats:
+- **MP4 (.mp4)** - Recommended
+- **AVI (.avi)** 
+- **MOV (.mov)**
+- **MKV (.mkv)**
+
+### Upload Tips:
+- Keep file size under 200MB for best performance
+- Use 720p or 1080p resolution
+- Start with short videos (under 30 seconds) for testing
+"""
+        
+        # Validate video file
+        is_valid, validation_message = self.validate_video_file(input_video)
+        if not is_valid:
+            return None, f"""
+## ❌ Video File Issue
+
+{validation_message}
+
+### What to try:
+1. **Check format**: Use MP4, AVI, MOV, or MKV
+2. **Reduce file size**: Compress video to under 200MB
+3. **Test with a shorter clip**: Try 10-30 seconds first
+4. **Use MP4 format**: Best compatibility and performance
+
+### Tools for video conversion:
+- **HandBrake** (free, cross-platform)
+- **FFmpeg** command line tool
+- **Online converters** (CloudConvert, etc.)
 """
         
         if not self.models_available or self.multi_colorizer is None:
@@ -472,6 +605,28 @@ def create_interface():
         padding: 1rem;
         margin: 0.5rem 0;
     }
+    .file-tips {
+        background-color: #f8f9fa;
+        border-left: 4px solid #17a2b8;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+        font-size: 0.9em;
+    }
+    .model-status {
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+    }
+    .progress-info {
+        background-color: #e7f3ff;
+        border-left: 4px solid #007bff;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        border-radius: 4px;
+    }
     """
     
     with gr.Blocks(css=css, title="Enhanced DeOldify Video Colorizer") as interface:
@@ -526,10 +681,18 @@ def create_interface():
                     gr.Markdown("### Input Settings")
                     
                     input_video = gr.File(
-                        label="Upload Video",
+                        label="Upload Video (Max: 200MB recommended)",
                         file_types=[".mp4", ".avi", ".mov", ".mkv"],
                         type="filepath"
                     )
+                    
+                    gr.Markdown("""
+                    **📁 File Upload Tips:**
+                    - **Recommended**: MP4 format for best compatibility
+                    - **Size limit**: Keep under 200MB for optimal performance
+                    - **Resolution**: 720p or 1080p works well
+                    - **Duration**: Start with videos under 30 seconds for testing
+                    """, elem_classes=["file-tips"])
                     
                     colorization_method = gr.Dropdown(
                         choices=["stable", "artistic"],
