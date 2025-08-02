@@ -263,9 +263,11 @@ class VideoColorizer:
         bwframes_folder.mkdir(parents=True, exist_ok=True)
         self._purge_images(bwframes_folder)
 
+        # Extract frames and convert to grayscale to ensure no residual color information
         process = (
             ffmpeg
                 .input(str(source_path))
+                .filter('format', 'gray')  # Convert to grayscale
                 .output(str(bwframe_path_template), format='image2', vcodec='mjpeg', **{'q:v':'0'})
                 .global_args('-hide_banner')
                 .global_args('-nostats')
@@ -274,6 +276,7 @@ class VideoColorizer:
 
         try:
             process.run()
+            logging.info(f"Extracted frames from {source_path} to {bwframes_folder} with grayscale conversion")
         except ffmpeg.Error as e:
             logging.error("ffmpeg error: {0}".format(e), exc_info=True)
             logging.error('stdout:' + e.stdout.decode('UTF-8'))

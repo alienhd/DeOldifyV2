@@ -26,13 +26,21 @@ try:
     from deoldify import device
     from deoldify.device_id import DeviceId
     
-    # Set device (CPU for safety, can be changed to GPU if available)
+    # Set device (prefer GPU, fallback to CPU with proper logging)
     try:
+        # Try GPU first
         device.set(device=DeviceId.GPU0)
-        device_info = "GPU0"
-    except:
+        device_info = device.get_device_info()
+        logger.info(f"Device setup complete: {device_info}")
+        if device_info['is_gpu']:
+            logger.info(f"Using GPU: {device_info.get('cuda_device_name', 'Unknown GPU')}")
+        else:
+            logger.info("Using CPU (GPU not available)")
+    except Exception as e:
+        logger.error(f"Error setting up device: {e}")
         device.set(device=DeviceId.CPU)
-        device_info = "CPU"
+        device_info = device.get_device_info()
+        logger.info(f"Fallback to CPU: {device_info}")
     
     DEOLDIFY_AVAILABLE = True
 except ImportError as e:
@@ -534,6 +542,13 @@ def create_interface():
     
     colorizer = GradioVideoColorizer()
     
+    # Get device information for display
+    try:
+        from deoldify import device
+        device_info = device.get_device_info()
+    except:
+        device_info = {'current_device': 'Unknown', 'is_gpu': False, 'cuda_available': False, 'cuda_device_count': 0}
+    
     # Custom CSS for better styling
     css = """
     .gradio-container {
@@ -779,9 +794,13 @@ def create_interface():
                - "Vivid" for more saturated, vibrant colors
             
             ### ⚙️ Current Settings:
-            - **Device**: CPU (change to GPU in code for faster processing)
+            - **Device**: {device_info.get('current_device', 'Unknown')} ({'GPU' if device_info.get('is_gpu', False) else 'CPU'})
+            - **CUDA Available**: {device_info.get('cuda_available', False)}
+            - **GPU Count**: {device_info.get('cuda_device_count', 0)}
+            {f"- **GPU Name**: {device_info.get('cuda_device_name', 'N/A')}" if device_info.get('cuda_available') else ""}
             - **Models**: Stable and Artistic colorization models
             - **Output Format**: MP4 with H.264 encoding
+            - **Enhanced Features**: Temporal consistency, edge enhancement, color stabilization
             
             ### 📝 Research References:
             This implementation incorporates techniques from recent research papers:
