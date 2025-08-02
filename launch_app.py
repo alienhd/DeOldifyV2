@@ -87,7 +87,7 @@ def launch_gradio_app():
         logger.info("Launching application...")
 
         interface.launch(
-            share=True, inbrowser=True, server_name="0.0.0.0", server_port=7860
+            share=False, inbrowser=True, server_name="127.0.0.1", server_port=7860
         )
 
     except ImportError as e:
