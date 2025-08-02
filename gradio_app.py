@@ -94,7 +94,7 @@ class GradioVideoColorizer:
             if not missing_models:
                 if progress:
                     progress(1.0, desc="All models already available!")
-                return True, "All models are already available"
+                return "All models are already available", self.get_model_status_info()
             
             def progress_callback(pct, desc):
                 if progress:
@@ -115,16 +115,16 @@ class GradioVideoColorizer:
                 self.setup_colorizers()
                 if progress:
                     progress(1.0, desc="Models downloaded and ready!")
-                return True, f"Successfully downloaded all {total_count} models"
+                return f"Successfully downloaded all {total_count} models", self.get_model_status_info()
             else:
                 failed_models = [name for name, success in results.items() if not success]
                 error_msg = f"Failed to download {len(failed_models)} models: {failed_models}"
-                return False, error_msg
+                return error_msg, self.get_model_status_info()
                 
         except Exception as e:
             error_msg = f"Error downloading models: {str(e)}"
             logger.error(error_msg)
-            return False, error_msg
+            return error_msg, self.get_model_status_info()
     def setup_colorizers(self):
         """Setup different colorization models."""
         if not self.models_available:
@@ -184,15 +184,17 @@ class GradioVideoColorizer:
             if video_path.suffix.lower() not in allowed_extensions:
                 return False, f"Unsupported format. Use: {', '.join(allowed_extensions)}"
             
-            # Check file size
+            # Check file size - Allow larger files for HD processing
             file_size_mb = video_path.stat().st_size / (1024 * 1024)
-            if file_size_mb > 500:
-                return False, f"File too large ({file_size_mb:.1f}MB). Keep under 200MB for best performance."
+            if file_size_mb > 2000:  # 2GB limit instead of 500MB
+                return False, f"File too large ({file_size_mb:.1f}MB). Please keep under 2GB for optimal performance."
             
             # Basic validation passed
             warnings = []
-            if file_size_mb > 200:
-                warnings.append(f"Large file ({file_size_mb:.1f}MB) - processing may be slow")
+            if file_size_mb > 500:
+                warnings.append(f"Large file ({file_size_mb:.1f}MB) - processing may take significant time")
+            elif file_size_mb > 200:
+                warnings.append(f"Medium file ({file_size_mb:.1f}MB) - processing may be slower")
             
             if video_path.suffix.lower() != '.mp4':
                 warnings.append("MP4 format recommended for best compatibility")
@@ -206,73 +208,6 @@ class GradioVideoColorizer:
         except Exception as e:
             return False, f"Error validating file: {str(e)}"
     
-    def colorize_video(
-        self,
-        input_video,
-        colorization_method: str = "stable",
-        render_factor: int = 21,
-        enable_temporal_consistency: bool = True,
-        enable_edge_enhancement: bool = True,
-        enable_color_stabilization: bool = True,
-        post_processing_preset: str = "balanced",
-        custom_saturation: float = 1.1,
-        custom_contrast: float = 1.05,
-        temperature_adjustment: float = 0.0,
-        tint_adjustment: float = 0.0,
-        frame_skip: int = 1,
-        progress=gr.Progress()
-    ):
-        """
-        Colorize video with enhanced processing options.
-        
-        Args:
-            input_video: Input video file
-            colorization_method: Method to use (stable/artistic)
-            render_factor: Quality factor for rendering
-            enable_temporal_consistency: Enable temporal consistency
-            enable_edge_enhancement: Enable edge enhancement
-            enable_color_stabilization: Enable color stabilization
-            post_processing_preset: Post-processing preset
-            custom_saturation: Custom saturation factor
-            custom_contrast: Custom contrast factor
-            temperature_adjustment: Color temperature adjustment
-            tint_adjustment: Tint adjustment
-            frame_skip: Process every Nth frame
-            progress: Gradio progress tracker
-            
-        Returns:
-            Tuple of (output_video_path, processing_info)
-        """
-        if not DEOLDIFY_AVAILABLE:
-            return None, """
-## ❌ DeOldify Not Available
-
-DeOldify components are not properly installed. Please check your installation.
-
-### Troubleshooting:
-1. Ensure all required packages are installed
-2. Check that the deoldify module is available
-3. Verify your Python environment setup
-"""
-        
-        if input_video is None:
-            return None, """
-## ⚠️ No Video File
-
-Please upload a video file to colorize.
-
-### Supported formats:
-- **MP4 (.mp4)** - Recommended
-- **AVI (.avi)** 
-- **MOV (.mov)**
-- **MKV (.mkv)**
-
-### Upload Tips:
-- Keep file size under 200MB for best performance
-- Use 720p or 1080p resolution
-- Start with short videos (under 30 seconds) for testing
-"""
-        
     def colorize_video(
         self,
         input_video,
@@ -612,6 +547,7 @@ def create_interface():
         margin: 0.5rem 0;
         border-radius: 4px;
         font-size: 0.9em;
+        color: #495057;
     }
     .model-status {
         background-color: #f8f9fa;
@@ -681,7 +617,7 @@ def create_interface():
                     gr.Markdown("### Input Settings")
                     
                     input_video = gr.File(
-                        label="Upload Video (Max: 200MB recommended)",
+                        label="Upload Video (Max: 2GB supported)",
                         file_types=[".mp4", ".avi", ".mov", ".mkv"],
                         type="filepath"
                     )
@@ -689,16 +625,17 @@ def create_interface():
                     gr.Markdown("""
                     **📁 File Upload Tips:**
                     - **Recommended**: MP4 format for best compatibility
-                    - **Size limit**: Keep under 200MB for optimal performance
-                    - **Resolution**: 720p or 1080p works well
-                    - **Duration**: Start with videos under 30 seconds for testing
+                    - **Size limit**: Up to 2GB supported (larger files take longer to process)
+                    - **Resolution**: 720p, 1080p, or even 4K supported
+                    - **Duration**: Start with videos under 30 seconds for testing, longer videos supported
+                    - **Performance**: Files under 500MB process faster
                     """, elem_classes=["file-tips"])
                     
                     colorization_method = gr.Dropdown(
-                        choices=["stable", "artistic"],
-                        value="stable",
+                        choices=["video", "stable", "artistic"],
+                        value="video",
                         label="Colorization Method",
-                        info="Stable: More realistic colors, Artistic: More vibrant/creative"
+                        info="Video: Specialized for video sequences, Stable: More realistic colors, Artistic: More vibrant/creative"
                     )
                     
                     render_factor = gr.Slider(
