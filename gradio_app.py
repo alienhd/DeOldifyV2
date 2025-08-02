@@ -21,7 +21,7 @@ from model_downloader import ModelDownloader, MODEL_CONFIGS
 # Import DeOldify components
 try:
     from deoldify.enhanced_video_colorizer import EnhancedVideoColorizer, MultiModelVideoColorizer
-    from deoldify.visualize import get_stable_video_colorizer, get_artistic_video_colorizer
+    from deoldify.visualize import get_stable_video_colorizer, get_artistic_video_colorizer, get_video_colorizer
     from deoldify.enhanced_post_processing import PostProcessingPipeline
     from deoldify import device
     from deoldify.device_id import DeviceId
@@ -133,11 +133,19 @@ class GradioVideoColorizer:
             
         try:
             # Initialize colorizers
+            video_vis = get_video_colorizer(render_factor=21)
             stable_vis = get_stable_video_colorizer(render_factor=21)
             artistic_vis = get_artistic_video_colorizer(render_factor=35)
             
             # Create enhanced colorizers
             self.multi_colorizer = MultiModelVideoColorizer()
+            
+            video_enhanced = EnhancedVideoColorizer(
+                video_vis.vis,
+                enable_temporal_consistency=True,
+                enable_edge_enhancement=True,
+                enable_color_stabilization=True
+            )
             
             stable_enhanced = EnhancedVideoColorizer(
                 stable_vis.vis,
@@ -153,6 +161,7 @@ class GradioVideoColorizer:
                 enable_color_stabilization=True
             )
             
+            self.multi_colorizer.add_colorizer("video", video_enhanced)
             self.multi_colorizer.add_colorizer("stable", stable_enhanced)
             self.multi_colorizer.add_colorizer("artistic", artistic_enhanced)
             
