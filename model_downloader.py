@@ -27,9 +27,13 @@ MODEL_CONFIGS = {
         'size_mb': 123
     },
     'ColorizeStable_gen.pth': {
-        'url': 'https://data.deepai.org/deoldify/ColorizeStable_gen.pth',
+        'url': 'https://www.dropbox.com/s/usf7uifrctqw9rl/ColorizeStable_gen.pth?dl=1',
         'description': 'Image Colorization Model (Stable)', 
-        'size_mb': 123
+        'size_mb': 123,
+        'alt_urls': [
+            'https://data.deepai.org/deoldify/ColorizeStable_gen.pth',
+            'https://github.com/jantic/DeOldify/releases/download/v1.0/ColorizeStable_gen.pth'
+        ]
     }
 }
 
@@ -71,7 +75,6 @@ class ModelDownloader:
             return False
             
         config = MODEL_CONFIGS[model_name]
-        url = config['url']
         model_path = self.models_dir / model_name
         
         # Check if already exists
@@ -80,40 +83,50 @@ class ModelDownloader:
             return True
             
         logger.info(f"Downloading {config['description']} ({config['size_mb']}MB)")
-        logger.info(f"URL: {url}")
         
-        try:
-            # Download with progress
-            response = requests.get(url, stream=True, timeout=30)
-            response.raise_for_status()
+        # Try main URL first, then alternative URLs if available
+        urls_to_try = [config['url']]
+        if 'alt_urls' in config:
+            urls_to_try.extend(config['alt_urls'])
             
-            total_size = int(response.headers.get('content-length', 0))
-            downloaded = 0
+        for url in urls_to_try:
+            logger.info(f"Trying URL: {url}")
             
-            with open(model_path, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-                        downloaded += len(chunk)
-                        
-                        if progress_callback and total_size > 0:
-                            progress = downloaded / total_size
-                            progress_callback(progress, f"Downloading {model_name}")
+            try:
+                # Download with progress
+                response = requests.get(url, stream=True, timeout=30, allow_redirects=True)
+                response.raise_for_status()
+                
+                total_size = int(response.headers.get('content-length', 0))
+                downloaded = 0
+                
+                with open(model_path, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                            downloaded += len(chunk)
                             
-            logger.info(f"Successfully downloaded {model_name}")
-            return True
-            
-        except requests.RequestException as e:
-            logger.error(f"Failed to download {model_name}: {e}")
-            # Clean up partial file
-            if model_path.exists():
-                model_path.unlink()
-            return False
-        except Exception as e:
-            logger.error(f"Unexpected error downloading {model_name}: {e}")
-            if model_path.exists():
-                model_path.unlink()
-            return False
+                            if progress_callback and total_size > 0:
+                                progress = downloaded / total_size
+                                progress_callback(progress, f"Downloading {model_name}")
+                                
+                logger.info(f"Successfully downloaded {model_name}")
+                return True
+                
+            except requests.RequestException as e:
+                logger.warning(f"Failed to download from {url}: {e}")
+                # Clean up partial file
+                if model_path.exists():
+                    model_path.unlink()
+                continue
+            except Exception as e:
+                logger.warning(f"Unexpected error downloading from {url}: {e}")
+                if model_path.exists():
+                    model_path.unlink()
+                continue
+                
+        logger.error(f"Failed to download {model_name} from all available URLs")
+        return False
             
     def download_all_models(self, progress_callback=None) -> Dict[str, bool]:
         """
