@@ -220,7 +220,7 @@ class VideoColorizer:
 
     def _purge_images(self, dir):
         for f in os.listdir(dir):
-            if re.search('.*?\.jpg', f):
+            if re.search(r'.*?\.jpg', f):
                 os.remove(os.path.join(dir, f))
 
     def _get_ffmpeg_probe(self, path:Path):
@@ -409,6 +409,27 @@ class VideoColorizer:
 
 def get_video_colorizer(render_factor: int = 21) -> VideoColorizer:
     return get_stable_video_colorizer(render_factor=render_factor)
+
+
+def get_enhanced_video_colorizer(render_factor: int = 21, method: str = "stable") -> "EnhancedVideoColorizer":
+    """Get enhanced video colorizer with temporal consistency and advanced post-processing."""
+    try:
+        from .enhanced_video_colorizer import EnhancedVideoColorizer
+        
+        if method == "artistic":
+            base_colorizer = get_artistic_video_colorizer(render_factor=render_factor)
+        else:
+            base_colorizer = get_stable_video_colorizer(render_factor=render_factor)
+        
+        return EnhancedVideoColorizer(
+            base_colorizer.vis,
+            enable_temporal_consistency=True,
+            enable_edge_enhancement=True,
+            enable_color_stabilization=True
+        )
+    except ImportError:
+        # Fallback to regular colorizer if enhanced components not available
+        return get_stable_video_colorizer(render_factor=render_factor)
 
 
 def get_artistic_video_colorizer(
